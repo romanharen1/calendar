@@ -1,0 +1,405 @@
+@page "/audit"
+@using Art.OnShift.Shared.Interfaces
+@using Art.OnShift.Shared.Models
+@inject IEventAuditService EventAuditService
+
+<PageTitle>Auditoria de Plant�es</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudPaper Class="pa-4 mb-4">
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudSelect T="string" @bind-Value="_selectedOperation" Label="Operação" Clearable="true">
+                    <MudSelectItem Value="@("CREATE")">Registro</MudSelectItem>
+                    <MudSelectItem Value="@("UPDATE")">Alteração</MudSelectItem>
+                    <MudSelectItem Value="@("DELETE")">Exclusão</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_fromDate" Label="Data Início" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_toDate" Label="Data Fim" Clearable="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_searchText" Label="Buscar" Placeholder="Busque: ID, Titulo, usuário..."
+                              Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search" />
+            </MudItem>
+        </MudGrid>
+        <MudGrid Class="mt-2">
+            <MudItem xs="12" Class="text-right">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters">
+                    Aplicar Filtro
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" Class="ml-2">
+                    Remover Filtro
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudDataGrid T="EventAuditViewModel" Items="@_filteredAuditData" Sortable="true" Filterable="false" Hideable="true"
+                 Hover="true" Dense="true" Loading="@_loading">
+        <Columns>
+            <PropertyColumn Property="x => x.EventDate.ToLocalTime()" Title="Registro" Format="yyyy-MM-dd HH:mm:ss"
+                            Sortable="true" />
+
+            <PropertyColumn Property="x => x.Operation" Title="Operação" Sortable="true">
+                <CellTemplate>
+                    @if (context.Item.Operation == "CREATE")
+                    {
+                        <MudChip Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.Add">CADASTRO</MudChip>
+                    }
+                    else if (context.Item.Operation == "UPDATE")
+                    {
+                        <MudChip Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.Edit">ALTERAÇÃO</MudChip>
+                    }
+                    else if (context.Item.Operation == "DELETE")
+                    {
+                        <MudChip Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Delete">EXCLUSÃO</MudChip>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn Property="x => x.EventId" Title="ID" Sortable="true" />
+            <PropertyColumn Property="x => x.UserId" Title="Usuário" Sortable="true" />
+
+            <PropertyColumn Property="x => x.Title" Title="Título" Sortable="true">
+                <CellTemplate>
+                    @if (context.Item.Operation == "UPDATE" && !string.IsNullOrEmpty(context.Item.PreviousTitle))
+                    {
+                        <div>
+                            <MudText Typo="Typo.body2" Color="Color.Error" Style="text-decoration: line-through;">
+                                @context.Item.PreviousTitle
+                            </MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Success">
+                                @context.Item.Title
+                            </MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2">@context.Item.Title</MudText>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+
+            <PropertyColumn Property="x => x.Start" Title="Data Início" Format="yyyy-MM-dd HH:mm" Sortable="true">
+                <CellTemplate>
+                    @if (context.Item.Operation == "UPDATE" && context.Item.PreviousStart.HasValue)
+                    {
+                        <div>
+                            <MudText Typo="Typo.caption" Color="Color.Error" Style="text-decoration: line-through;">
+                                @context.Item.PreviousStart?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Success">
+                                @context.Item.Start?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                            </MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption">@context.Item.Start?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+
+            <PropertyColumn Property="x => x.End" Title="Data Fim" Format="yyyy-MM-dd HH:mm" Sortable="true">
+                <CellTemplate>
+                    @if (context.Item.Operation == "UPDATE" && context.Item.PreviousEnd.HasValue)
+                    {
+                        <div>
+                            <MudText Typo="Typo.caption" Color="Color.Error" Style="text-decoration: line-through;">
+                                @context.Item.PreviousEnd?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Success">
+                                @context.Item.End?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                            </MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption">@context.Item.End?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+
+            <PropertyColumn Property="x => x.Level1Name" Title="Analista" Sortable="true">
+                <CellTemplate>
+                    @if (context.Item.Operation == "UPDATE" && context.Item.PreviousLevel1Name !=
+                    context.Item.Level1Name)
+                    {
+                        <div>
+                            <MudText Typo="Typo.caption" Color="Color.Error" Style="text-decoration: line-through;">
+                                @context.Item.PreviousLevel1Name
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Success">
+                                @context.Item.Level1Name
+                            </MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption">@context.Item.Level1Name</MudText>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+
+            <PropertyColumn Property="x => x.Level2Name" Title="2 Escalonamento" Sortable="true">
+                <CellTemplate>
+                    @if (context.Item.Operation == "UPDATE" && context.Item.PreviousLevel2Name !=
+                    context.Item.Level2Name)
+                    {
+                        <div>
+                            <MudText Typo="Typo.caption" Color="Color.Error" Style="text-decoration: line-through;">
+                                @context.Item.PreviousLevel2Name
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Success">
+                                @context.Item.Level2Name
+                            </MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption">@context.Item.Level2Name</MudText>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+
+            <PropertyColumn Property="x => x.Level3Name" Title="3 Escalonamento" Sortable="true">
+                <CellTemplate>
+                    @if (context.Item.Operation == "UPDATE" && context.Item.PreviousLevel3Name !=
+                    context.Item.Level3Name)
+                    {
+                        <div>
+                            <MudText Typo="Typo.caption" Color="Color.Error" Style="text-decoration: line-through;">
+                                @context.Item.PreviousLevel3Name
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Success">
+                                @context.Item.Level3Name
+                            </MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption">@context.Item.Level3Name</MudText>
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+
+            <TemplateColumn Title="Ações" Sortable="false">
+                <CellTemplate>
+                    <MudTooltip Text="Visualizar Detalhes">
+                        <MudIconButton Icon="Icons.Material.Filled.Visibility" Color="Color.Primary" Size="Size.Small"
+                                       OnClick="@(() => ViewDetails(context.Item))" />
+                    </MudTooltip>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+
+        <PagerContent>
+            <MudDataGridPager T="EventAuditViewModel" />
+        </PagerContent>
+    </MudDataGrid>
+</MudContainer>
+
+<!-- Details Dialog -->
+<MudDialog @bind-IsVisible="_showDetailsDialog" Options="_dialogOptions">
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-4">Detalhes</MudText>
+
+        @if (_selectedAudit != null)
+        {
+            <MudGrid>
+                <MudItem xs="6">
+                    <MudTextField Label="ID" Value="@_selectedAudit.EventId.ToString()" ReadOnly="true" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudTextField Label="Operacao" Value="@_selectedAudit.Operation" ReadOnly="true" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudTextField Label="Data - Hora" Value="@_selectedAudit.EventDate.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")"
+                                  ReadOnly="true" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudTextField Label="Usuario" Value="@_selectedAudit.UserId" ReadOnly="true" />
+                </MudItem>
+            </MudGrid>
+
+            @if (_selectedAudit.Operation == "UPDATE")
+            {
+                <MudText Typo="Typo.h6" Class="mt-4 mb-2">Modificações</MudText>
+                <MudGrid>
+                    @if (_selectedAudit.PreviousTitle != _selectedAudit.Title)
+                    {
+                        <MudItem xs="12">
+                            <MudTextField Label="Titulo Anterior" Value="@_selectedAudit.PreviousTitle" ReadOnly="true" />
+                            <MudTextField Label="Titulo Atual" Value="@_selectedAudit.Title" ReadOnly="true" Class="mt-2" />
+                        </MudItem>
+                    }
+                    @if (_selectedAudit.PreviousStart != _selectedAudit.Start)
+                    {
+                        <MudItem xs="6">
+                            <MudTextField Label="Inicio Anterior"
+                                          Value="@_selectedAudit.PreviousStart?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")" ReadOnly="true" />
+                            <MudTextField Label="Inicio Atual" Value="@_selectedAudit.Start?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")"
+                                          ReadOnly="true" Class="mt-2" />
+                        </MudItem>
+                    }
+                    @if (_selectedAudit.PreviousEnd != _selectedAudit.End)
+                    {
+                        <MudItem xs="6">
+                            <MudTextField Label="Fim Anterior" Value="@_selectedAudit.PreviousEnd?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")"
+                                          ReadOnly="true" />
+                            <MudTextField Label="Fim Atual" Value="@_selectedAudit.End?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")"
+                                          ReadOnly="true" Class="mt-2" />
+                        </MudItem>
+                    }
+                    @if (_selectedAudit.PreviousLevel1Name != _selectedAudit.Level1Name)
+                    {
+                        <MudItem xs="4">
+                            <MudTextField Label="Analista Anterior" Value="@_selectedAudit.PreviousLevel1Name" ReadOnly="true" />
+                            <MudTextField Label="Analista Atual" Value="@_selectedAudit.Level1Name" ReadOnly="true"
+                                          Class="mt-2" />
+                        </MudItem>
+                    }
+                    @if (_selectedAudit.PreviousLevel2Name != _selectedAudit.Level2Name)
+                    {
+                        <MudItem xs="4">
+                            <MudTextField Label="1 Escalonamento Anterior" Value="@_selectedAudit.PreviousLevel2Name" ReadOnly="true" />
+                            <MudTextField Label="1 Escalonamento Atual" Value="@_selectedAudit.Level2Name" ReadOnly="true"
+                                          Class="mt-2" />
+                        </MudItem>
+                    }
+                    @if (_selectedAudit.PreviousLevel3Name != _selectedAudit.Level3Name)
+                    {
+                        <MudItem xs="4">
+                            <MudTextField Label="2 Escalonamento Anterior" Value="@_selectedAudit.PreviousLevel3Name" ReadOnly="true" />
+                            <MudTextField Label="2 Escalonamento Atual" Value="@_selectedAudit.Level3Name" ReadOnly="true"
+                                          Class="mt-2" />
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+            else
+            {
+                <MudText Typo="Typo.h6" Class="mt-4 mb-2">Plantão</MudText>
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudTextField Label="Título" Value="@_selectedAudit.Title" ReadOnly="true" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudTextField Label="Data Início" Value="@_selectedAudit.Start?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")"
+                                      ReadOnly="true" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudTextField Label="Data Fim" Value="@_selectedAudit.End?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")"
+                                      ReadOnly="true" />
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudTextField Label="Analista de Plantao" Value="@_selectedAudit.Level1Name" ReadOnly="true" />
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudTextField Label="1 Escalonamento" Value="@_selectedAudit.Level2Name" ReadOnly="true" />
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudTextField Label="2 Escalonamento" Value="@_selectedAudit.Level3Name" ReadOnly="true" />
+                    </MudItem>
+                </MudGrid>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDetailsDialog">Fechar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<EventAuditViewModel> _auditData = new();
+    private List<EventAuditViewModel> _filteredAuditData = new();
+    private bool _loading = true;
+
+    // Filter properties
+    private string? _selectedOperation;
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+    private string _searchText = "";
+
+    // Dialog properties
+    private bool _showDetailsDialog;
+    private EventAuditViewModel? _selectedAudit;
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Large, FullWidth = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAuditData();
+    }
+
+    private async Task LoadAuditData()
+    {
+        _loading = true;
+        try
+        {
+            // Replace with your actual service call
+            _auditData = await EventAuditService.GetAuditEventsAsync();
+
+            // Sample data for demonstration
+            //auditData = GenerateSampleData();
+            _filteredAuditData = _auditData.OrderByDescending(a => a.EventDate).ToList();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        _filteredAuditData = _auditData.Where(audit =>
+        {
+            // Operation filter
+            if (!string.IsNullOrEmpty(_selectedOperation) && audit.Operation != _selectedOperation)
+                return false;
+
+            // Date range filter
+            if (_fromDate.HasValue && audit.EventDate.Date < _fromDate.Value.Date)
+                return false;
+
+            if (_toDate.HasValue && audit.EventDate.Date > _toDate.Value.Date)
+                return false;
+
+            // Search filter
+            if (string.IsNullOrEmpty(_searchText)) return true;
+            var searchLower = _searchText.ToLowerInvariant();
+            return audit.Title?.ToLowerInvariant().Contains(searchLower) == true ||
+                   audit.UserId.ToLowerInvariant().Contains(searchLower) ||
+                   audit.Level1Name?.ToLowerInvariant().Contains(searchLower) == true ||
+                   audit.Level2Name?.ToLowerInvariant().Contains(searchLower) == true ||
+                   audit.Level3Name?.ToLowerInvariant().Contains(searchLower) == true ||
+                   audit.EventId.ToString().Contains(searchLower);
+
+        }).ToList();
+    }
+
+    private void ClearFilters()
+    {
+        _selectedOperation = null;
+        _fromDate = null;
+        _toDate = null;
+        _searchText = "";
+        _filteredAuditData = _auditData.ToList();
+    }
+
+    private void ViewDetails(EventAuditViewModel audit)
+    {
+        _selectedAudit = audit;
+        _showDetailsDialog = true;
+    }
+
+    private void CloseDetailsDialog()
+    {
+        _showDetailsDialog = false;
+        _selectedAudit = null;
+    }
+
+
+}

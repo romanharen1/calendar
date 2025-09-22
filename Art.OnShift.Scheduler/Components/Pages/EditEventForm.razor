@@ -1,0 +1,177 @@
+﻿@using Art.OnShift.Shared.Interfaces
+@using Art.OnShift.Shared.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inject IEventService EventService
+@inject IUserService UserService
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IDialogService DialogService
+@inject IJSRuntime JSRuntime
+
+
+<EditForm Model="@currentEvent" OnValidSubmit="HandleValidSubmit">
+    <MudCard>
+        <MudCardContent>
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <MudAlert Severity="Severity.Error">@errorMessage</MudAlert>
+            }
+            <MudTimePicker Disabled="true" Label="Hora Inicio" @bind-Time="startTime" Variant="Variant.Outlined" />
+            <MudTimePicker Disabled="true" Label="Hora Fim" @bind-Time="endTime" Variant="Variant.Outlined" />
+            <MudSelect Disabled="@isPastEvent" @bind-Value="currentEvent.Level1Id" Label="Analista de Plantão" Required="true"
+                       Variant="Variant.Outlined">
+                @foreach (var user in users)
+                {
+                    <MudSelectItem Value="@user.Id">@user.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect Disabled="@isPastEvent" @bind-Value="currentEvent.Level2Id" Label="Primeiro Escalonamento" Required="true"
+                       Variant="Variant.Outlined">
+                @foreach (var user in users)
+                {
+                    <MudSelectItem Value="@user.Id">@user.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSelect Disabled="@isPastEvent" @bind-Value="currentEvent.Level3Id" Label="Segundo Escalonamento" Required="true"
+                       Variant="Variant.Outlined">
+
+                @foreach (var user in users)
+                {
+                    <MudSelectItem Value="@user.Id">@user.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudCardActions>
+                <MudButton Disabled="@isPastEvent" Variant="Variant.Filled" OnClick="DeleteEvent" StartIcon="@Icons.Material.Filled.Delete" Color="Color.Primary" IconColor="Color.Error">Excluir</MudButton>
+                <MudButton Disabled="@isPastEvent" ButtonType="ButtonType.Submit" StartIcon="@Icons.Material.Filled.Save" Color="Color.Primary" IconColor="Color.Inherit" Variant="Variant.Filled"
+                           Class="ml-auto">Salvar Alterações</MudButton>
+            </MudCardActions>
+        </MudCardContent>
+    </MudCard>
+</EditForm>
+@code {
+    [Parameter]
+    public int EventId { get; set; }
+    private TimeZoneInfo userTimeZone;
+    private EventModel currentEvent = new EventModel();
+    private UserModel currentUser = new UserModel();
+    private TimeSpan? startTime = null;
+    private TimeSpan? endTime = null;
+    private DateTime? eventDate = null;
+    private bool isPastEvent = false;
+
+    private IEnumerable<UserModel> users = new List<UserModel>();
+    private string? errorMessage;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        users = await UserService.GetUsersAsync();
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userClaims = authState.User;
+
+        if (userClaims.Identity != null && userClaims.Identity.IsAuthenticated)
+        {
+            var identity = userClaims.FindFirst(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (!string.IsNullOrEmpty(identity))
+            {
+                currentUser = await UserService.GetUserByIdAsync(identity);
+                if (currentUser.PhoneNumber == null)
+                {
+                    NavigationManager.NavigateTo("/update-contact");
+                }
+            }
+        }
+
+        currentEvent = await EventService.GetEventByIdAsync(EventId);
+        DateTime starTimeTmp = currentEvent.Start ?? DateTime.UtcNow;
+        var localStartTime = TimeZoneInfo.ConvertTimeFromUtc(starTimeTmp, TimeZoneInfo.Local);
+        startTime = localStartTime.TimeOfDay;
+        DateTime endTimeTmp = currentEvent.End ?? DateTime.UtcNow.AddHours(1);
+        var localEndTime = TimeZoneInfo.ConvertTimeFromUtc(endTimeTmp, TimeZoneInfo.Local);
+        endTime = localEndTime.TimeOfDay;
+        DateTime eventDateTmp = currentEvent.Start?.Date ?? DateTime.UtcNow.Date;
+        var localEventdate = TimeZoneInfo.ConvertTimeFromUtc(eventDateTmp, TimeZoneInfo.Local);
+        eventDate = localEventdate;
+
+
+        isPastEvent = TimeZoneInfo.ConvertTimeToUtc(currentEvent.End.Value) < DateTime.UtcNow; //xDev: Req: Permitir alteração de um plantão corrente caso algum incidente ocorra - Alternativa: O Colaborador deverá inserir um novo registro caso necessário.
+
+    }
+
+    private string GetFirstAndLastName(string? fullName)
+    {
+        if (fullName == null)
+        {
+            return "Plantão";
+        }
+        var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            return "Plantão";
+        }
+        else
+        {
+            return parts.FirstOrDefault() + " " + parts.LastOrDefault();
+        }
+
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        currentEvent.Title = GetFirstAndLastName(currentEvent.Level1?.Name ?? string.Empty);
+
+        try
+        {
+
+            await EventService.UpdateEventAsync(currentEvent);
+            NavigationManager.NavigateTo("/");
+
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+
+    private async Task DeleteEvent()
+    {
+        var parameters = new DialogParameters<DialogComponent>
+        {
+            { x => x.ContentText, "Você realmente deseja excluir este plantão?" },
+            { x => x.YesText, "Excluir" },
+            { x => x.NoText, "Cancelar" },
+            { x => x.Color, Color.Error },
+            { x => x.EventId, EventId }
+        };
+        if (TimeZoneInfo.ConvertTimeToUtc(currentEvent.Start.Value) <= DateTime.UtcNow)
+        {
+            parameters.Add(x => x.ContentText, "PLANTÃO VIGENTE - TEM CERTEZA QUE DESEJA PROSSEGUIR?");
+        }
+
+
+        var options = new DialogOptions() { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall };
+
+        var dialog = await DialogService.ShowAsync<DialogComponent>("Aviso!", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            try
+            {
+                await EventService.DeleteEventAsync(currentEvent.Id);
+                NavigationManager.NavigateTo("/", forceLoad: true);
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Erro ao deletar evento: {ex.Message}";
+            }
+        }
+
+    }
+}

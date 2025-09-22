@@ -1,0 +1,41 @@
+﻿<MudDialog>
+    <DialogContent>
+        <MudText>@ContentText</MudText>
+    </DialogContent>
+    <DialogActions>
+        @if (NoText != null)
+        {
+            <MudButton OnClick="Cancel">@NoText</MudButton>
+        }
+        <MudButton Color="@Color" Variant="Variant.Filled" OnClick="Submit">@YesText</MudButton>
+    </DialogActions>
+</MudDialog>
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance? MudDialog { get; set; }
+
+    [Parameter]
+    public string? ContentText { get; set; }
+
+    [Parameter]
+    public string? NoText { get; set; }
+
+    [Parameter]
+    public string? YesText { get; set; }
+
+    [Parameter]
+    public Color Color { get; set; }
+
+    [Parameter]
+    public int EventId { get; set; }
+
+    private void Submit()
+    {
+        MudDialog?.Close(DialogResult.Ok(EventId));
+    }
+
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+    }
+}

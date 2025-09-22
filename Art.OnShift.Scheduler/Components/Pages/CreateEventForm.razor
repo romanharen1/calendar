@@ -1,0 +1,137 @@
+﻿@using Art.OnShift.Shared.Interfaces
+@using Art.OnShift.Shared.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inject IJSRuntime JSRuntime
+@inject IEventService EventService
+@inject IUserService UserService
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<EditForm Model="@newEvent" OnValidSubmit="HandleValidSubmit">
+    <MudCard>
+        <MudCardContent>
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <MudAlert Severity="Severity.Error">@errorMessage</MudAlert>
+            }
+            <MudTimePicker Label="Hora Inicio" @bind-Time="startTime" Variant="Variant.Outlined" />
+            <MudTimePicker Label="Hora Fim" @bind-Time="endTime" Variant="Variant.Outlined" />
+            <MudSelect @bind-Value="newEvent.Level1Id" Label="Analista de Plantão" Required="true"
+                       Variant="Variant.Outlined">
+                @foreach (var user in users)
+                {
+                    <MudSelectItem Value="@user.Id">@user.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect @bind-Value="newEvent.Level2Id" Label="Primeiro Escalonamento" Required="true"
+                       Variant="Variant.Outlined">
+                @foreach (var user in users)
+                {
+                    <MudSelectItem Value="@user.Id">@user.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect @bind-Value="newEvent.Level3Id" Label="Segundo Escalonamento" Required="true"
+                       Variant="Variant.Outlined">
+                @foreach (var user in users)
+                {
+                    <MudSelectItem Value="@user.Id">@user.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudCardActions>
+
+                <MudButton ButtonType="ButtonType.Submit" Color="Color.Primary" FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.Save" IconColor="Color.Inherit" Variant="Variant.Filled"
+                           Class="ml-auto">Cadastrar</MudButton>
+            </MudCardActions>
+        </MudCardContent>
+    </MudCard>
+</EditForm>
+@code {
+    [Parameter]
+    public DateTime SelectedDay { get; set; }
+    private EventModel newEvent = new EventModel();
+    private UserModel currentUser = new UserModel();
+    private TimeSpan? startTime = DateTime.Now.TimeOfDay;
+    private TimeSpan? endTime = DateTime.Now.AddHours(0).TimeOfDay;
+    private IEnumerable<UserModel> users = new List<UserModel>();
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        users = await UserService.GetUsersAsync();
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userClaims = authState.User;
+
+        if (userClaims.Identity != null && userClaims.Identity.IsAuthenticated)
+        {
+            var identity = userClaims.FindFirst(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (!string.IsNullOrEmpty(identity))
+            {
+                currentUser = await UserService.GetUserByIdAsync(identity);
+                if (currentUser.PhoneNumber == null)
+                {
+                    NavigationManager.NavigateTo("/update-contact");
+                }
+            }
+        }
+    }
+
+
+    private string GetFirstAndLastName(string? fullName)
+    {
+
+        if (fullName == null)
+        {
+            return "Plantão";
+        }
+        var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            return "Plantão";
+        }
+        else
+        {
+            return parts.FirstOrDefault() + " " + parts.LastOrDefault();
+        }
+
+    }
+
+
+    private async Task HandleValidSubmit()
+    {
+        if (startTime != null && endTime != null)
+        {
+            newEvent.Title = GetFirstAndLastName(currentUser.Name);
+            newEvent.Start = ((DateTime)(SelectedDay + startTime)).ToUniversalTime();
+            newEvent.End = ((DateTime)(SelectedDay.AddSeconds(59) + endTime)).ToUniversalTime();
+            try
+            {
+                bool isAvailable = await EventService.IsTimeSlotAvailableAsync(newEvent.Start, newEvent.End);
+                if (!isAvailable)
+                {
+                    throw new InvalidOperationException("Conflito de horarios detectado!");
+                }
+                if (newEvent.Start < DateTime.UtcNow)
+                {
+                    throw new InvalidOperationException("Não é permitido registrar plantões em uma data passada!");
+                }
+                if (newEvent.Start >= newEvent.End)
+                {
+                    throw new InvalidOperationException("A hora fim do plantão deve ser maior que a hora de início!");
+                }
+                await EventService.CreateEventAsync(newEvent);
+                NavigationManager.NavigateTo("/", forceLoad: true);
+            }
+            catch (InvalidOperationException ex)
+            {
+                errorMessage = ex.Message;
+            }
+            
+        }
+        
+    }
+}

@@ -1,0 +1,40 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="typeof(Program).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                <NotAuthorized>
+                    @if (context.User.Identity?.IsAuthenticated != true)
+                    {
+                        <RedirectToLogin />
+                    }
+                    else
+                    {
+                        <div class="mud-container">
+                            <MudAlert Severity="Severity.Warning">
+                                You are not authorized to access this resource.
+                            </MudAlert>
+                        </div>
+                    }
+                </NotAuthorized>
+                <Authorizing>
+                    <div class="mud-container mud-container-maxwidth-false"
+                        style="display: flex; justify-content: center; align-items: center; height: 100vh;">
+                        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                    </div>
+                </Authorizing>
+            </AuthorizeRouteView>
+        </Found>
+        <NotFound>
+            <PageTitle>Not found</PageTitle>
+            <LayoutView Layout="@typeof(Layout.MainLayout)">
+                <div class="mud-container">
+                    <MudAlert Severity="Severity.Error">
+                        Sorry, there's nothing at this address.
+                    </MudAlert>
+                </div>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>

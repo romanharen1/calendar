@@ -1,0 +1,19 @@
+﻿@for (int i = 0; i < _eventCount; i++)
+{
+    <MudPaper Width="100%">
+        <CreateEventForm SelectedDay="SelectedDay"></CreateEventForm>
+    </MudPaper>
+}
+
+
+@code {
+    [Parameter]
+    public DateTime SelectedDay { get; set; }
+
+    int _eventCount = 1;
+
+    private void IncrementarLista()
+    {
+        _eventCount++;
+    }
+}

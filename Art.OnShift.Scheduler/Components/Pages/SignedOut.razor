@@ -1,0 +1,16 @@
+﻿@page "/signout-callback-oidc"
+
+<div class="mud-container" style="display: flex; justify-content: center; align-items: center; height: 100vh;">
+    <MudPaper Class="pa-8" Style="text-align: center;">
+        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Color="Color.Success" Class="mb-4" />
+        <MudText Typo="Typo.h4" Class="mb-4">Signed Out Successfully</MudText>
+        <MudText Typo="Typo.body1" Class="mb-6">
+            You have been signed out of the application.
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Href="/MicrosoftIdentity/Account/SignIn">
+            Sign In Again
+        </MudButton>
+    </MudPaper>
+</div>

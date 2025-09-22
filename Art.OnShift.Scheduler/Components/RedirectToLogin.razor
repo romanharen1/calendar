@@ -1,0 +1,25 @@
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<div class="mud-container" style="display: flex; justify-content: center; align-items: center; height: 100vh;">
+    <MudPaper Class="pa-8" Style="text-align: center;">
+        <MudIcon Icon="@Icons.Material.Filled.Security" Size="Size.Large" Color="Color.Primary" Class="mb-4" />
+        <MudText Typo="Typo.h4" Class="mb-4">Authentication Required</MudText>
+        <MudText Typo="Typo.body1" Class="mb-6">
+            Please sign in with your Azure AD account to access this application.
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Login"
+                   OnClick="SignIn">
+            Sign In with Azure AD
+        </MudButton>
+    </MudPaper>
+</div>
+
+@code {
+    private async Task SignIn()
+    {
+        await JSRuntime.InvokeVoidAsync("window.location.href", "/MicrosoftIdentity/Account/SignIn");
+    }
+}

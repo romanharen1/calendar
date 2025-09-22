@@ -1,0 +1,111 @@
+﻿@page "/update-contact"
+@using Art.OnShift.Shared.Interfaces
+@using Art.OnShift.Shared.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using System.Text.RegularExpressions
+@inject IUserService UserService
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Informações de Usuário</PageTitle>
+
+<EditForm Model="@newUser" OnValidSubmit="HandleValidSubmit" FormName="FormUpdateContact">
+    <DataAnnotationsValidator />
+    <MudCard>
+        <MudCardContent>
+            <MudTextField Label="Email" Class="mt-3" @bind-Value="newUser.Email" Variant="Variant.Outlined" Disabled=true/>
+            <MudTextField Label="Nome" Class="mt-3" @bind-Value="newUser.Name" For="@(() => newUser.Name)"
+                          Variant="Variant.Outlined" Disabled=true/>
+            <MudTextField @oninput="FormatPhoneNumber" Placeholder="+5527123456789" Label="Telefone" Class="mt-3" @bind-Value="newUser.PhoneNumber"
+                          For="@(() => newUser.PhoneNumber)" InputType="InputType.Telephone" Variant="Variant.Outlined" />
+            @if (!IsValidPhone(newUser.PhoneNumber))
+            {
+                <MudText Typo="Typo.caption" Color="Color.Error" Style="text-decoration: spelling-error;">
+                    Formato requerido: +55XX123456789.
+                </MudText>
+            }
+            <MudCardActions>
+                <MudButton Disabled="!IsValidPhone(newUser.PhoneNumber)" ButtonType="ButtonType.Submit" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Save" Color="Color.Primary" Size="Size.Small">Salvar Alterações</MudButton>
+            </MudCardActions>
+        </MudCardContent>
+    </MudCard>
+</EditForm>
+
+@code {
+    private UserModel newUser = new UserModel();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var userClaims = authState.User;
+
+        if (userClaims.Identity != null && userClaims.Identity.IsAuthenticated)
+        {
+            var identity = userClaims.FindFirst(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+            if (!string.IsNullOrEmpty(identity))
+            {
+                newUser = await UserService.GetUserByIdAsync(identity);
+            }
+        }
+    }
+    [Inject]
+    private IDialogService? DialogService { get; set; }
+
+    private bool IsValidPhone(string? phone)
+    {
+        if (phone == null)
+        {
+            return false;
+        }
+        else
+        {
+            return Regex.IsMatch(newUser.PhoneNumber, @"^\+55\d{11}$");
+        }
+        
+    } 
+
+    private void FormatPhoneNumber(ChangeEventArgs e)
+    {
+        var input = e.Value?.ToString() ?? "";
+        
+        // Remove non-digits except '+' at the start
+        var digits = new string(input.Where((c, i) => char.IsDigit(c) || (i == 0 && c == '+')).ToArray());
+        
+        // Ensure it starts with +55
+        if (!digits.StartsWith("+55"))
+        {
+            digits = "+55" + new string(digits.Where(char.IsDigit).ToArray());
+        }
+        
+        // Limit to 11 digits after +55
+        if (digits.Length > 13) // +55 + 11 digits
+        {
+            digits = digits.Substring(0, 13);
+        }
+        
+        newUser.PhoneNumber = digits;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+
+        try
+        {
+            await UserService.UpdateUserAsync(newUser);
+            NavigationManager.NavigateTo("/", forceLoad:true);
+        }
+        catch (Exception e)
+        {
+            if (DialogService != null)
+            {
+                await DialogService.ShowMessageBox(
+                "Erro ao atualizar",
+                $"Ocorreu um erro ao atualizar suas informações: {e.Message}",
+                yesText: "OK"
+                );
+            }
+        }
+    }
+
+}

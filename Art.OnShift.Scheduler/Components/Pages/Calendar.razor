@@ -1,0 +1,97 @@
+﻿@page "/"
+@using Art.OnShift.Shared.Interfaces
+@using Art.OnShift.Shared.Models
+@using System.Globalization
+@inject IEventService EventService
+
+<PageTitle>Agenda de Plantões</PageTitle>
+
+<MudCalendar T="ExtendedCalendarItem" MonthCellMinHeight="200" Items="_eventsOnCalendar" CellClicked="CellClicked"
+             ItemClicked="ItemClicked" DayTimeInterval="CalendarTimeInterval.Minutes60" />
+
+
+@code {
+
+    [Inject]
+    private IDialogService? DialogService { get; set; }
+    private List<EventModel> _eventsFromDb = new();
+    private List<ExtendedCalendarItem> _eventsOnCalendar = new();
+    public class ExtendedCalendarItem : CalendarItem
+    {
+        public int EventId { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _eventsFromDb = await EventService.GetEventsAsync();
+        foreach (EventModel eventFromDb in _eventsFromDb)
+        {
+            _eventsOnCalendar.Add(new ExtendedCalendarItem
+                {
+                    EventId = eventFromDb.Id,
+                    Start = TimeZoneInfo.ConvertTimeFromUtc(eventFromDb.Start ?? DateTime.MinValue, TimeZoneInfo.Local),
+                //Start = eventFromDb.Start ?? DateTime.MinValue,
+                    End = TimeZoneInfo.ConvertTimeFromUtc(eventFromDb.End ?? DateTime.MinValue, TimeZoneInfo.Local),
+                //End = eventFromDb.End ?? DateTime.MinValue,
+                    Text = eventFromDb.Title ?? "Untitled Event"
+                });
+        }
+    }
+
+    private Task CellClicked(DateTime dateTime)
+    {
+        if (dateTime.Day < DateTime.Now.Day)
+        {
+            var lockdialog = new DialogParameters<DialogComponent>
+{
+{ x => x.ContentText, "Não é possivel registrar plantões em datas passadas!" },
+{ x => x.YesText, "Ok" },
+{ x => x.Color, Color.Error }
+};
+
+            var lockoptions = new DialogOptions() { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall };
+
+            DialogService.ShowAsync<DialogComponent>("Aviso!", lockdialog, lockoptions);
+        }
+        else
+        {
+
+            var parameters = new DialogParameters<CreateEventContainer>();
+            parameters.Add(x => x.SelectedDay, dateTime);
+
+            var options = new DialogOptions
+                {
+                    CloseOnEscapeKey = true,
+                    MaxWidth = MaxWidth.Medium,
+                    FullWidth = true,
+                    BackdropClick =
+                        false,
+                    CloseButton = true
+                };
+            return DialogService.ShowAsync<CreateEventContainer>("Cadastrar plantão " +
+            DateTimeFormatInfo.CurrentInfo.GetDayName(dateTime.DayOfWeek) + ", " + dateTime.ToShortDateString(),
+            parameters, options);
+        }
+        return null;
+    }
+
+    private Task ItemClicked(ExtendedCalendarItem item)
+    {
+        var parameters = new DialogParameters<EditEventContainer>();
+        parameters.Add(x => x.EventId, item.EventId);
+
+        var options = new DialogOptions
+            {
+                CloseOnEscapeKey = true,
+                MaxWidth = MaxWidth.Medium,
+                FullWidth = true,
+                BackdropClick =
+                    false,
+                CloseButton = true
+            };
+        return DialogService.ShowAsync<EditEventContainer>("Alterar plantão de " + item.Text + " em: " +
+        DateTimeFormatInfo.CurrentInfo.GetDayName(item.Start.DayOfWeek) + ", " + item.Start.ToShortDateString(),
+        parameters, options);
+    }
+
+}
